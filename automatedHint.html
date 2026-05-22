@@ -1,0 +1,110 @@
+<script type="text/javascript">
+    RED.nodes.registerType('AutomatedHint',{
+        category: 'function',
+        color: '#a6bbcf',
+        defaults: {
+            name: {value:""},
+            // Hints should be an array of objects with time and message properties
+            // It has to have at least one entry.
+            hints: {value:[],required:true, validate: function(v) {
+                if (!Array.isArray(v) || v.length < 1) {
+                    return false;
+                }
+                for (let hint of v) {
+                    if (!Number.isInteger(hint.time) || typeof hint.message !== 'string') {
+                        return false;
+                    }
+                }
+                return true;
+            }}
+        },
+        inputs: 1,
+        outputs: 1,
+        icon: "file.svg",
+        label: function() {
+            return this.name||"AutomatedHint";
+        },
+        oneditprepare: function() {
+            const hintsContainer = $("#node-input-hints-container");
+            const hints = Array.isArray(this.hints) ? this.hints : [];
+
+            function createHintRow(hint) {
+                const row = $(
+                    '<div style="display:flex; gap:8px; align-items:center; width:100%;">' +
+                        '<label style="flex-shrink:0;">Time (s):</label>' +
+                        '<input type="number" class="node-input-hint-time" min="0" step="1" style="width:110px;">' +
+                        '<input type="text" class="node-input-hint-message" placeholder="Path to hint file" style="flex:1;">' +
+                    '</div>'
+                );
+
+                row.find(".node-input-hint-time").val(hint && Number.isInteger(hint.time) ? hint.time : 0);
+                row.find(".node-input-hint-message").val(hint && typeof hint.message === "string" ? hint.message : "");
+                return row;
+            }
+
+            hintsContainer.editableList({
+                addButton: true,
+                removable: true,
+                sortable: true,
+                addItem: function(container, i, hint) {
+                    container.append(createHintRow(hint));
+                },
+                sort: function(elA, elB) {
+                    return elA.time 
+                }
+            });
+
+            for (const hint of hints) {
+                hintsContainer.editableList("addItem", hint);
+            }
+
+            $("#node-input-hints-add").on("click", function() {
+                hintsContainer.editableList("addItem", { time: 0, message: "" });
+            });
+        },
+        oneditsave: function() {
+            const hints = [];
+            $("#node-input-hints-container").editableList("items").each(function() {
+                const row = $(this);
+                const time = Number.parseInt(row.find(".node-input-hint-time").val(), 10);
+                const message = row.find(".node-input-hint-message").val();
+
+                if (Number.isInteger(time) && typeof message === "string") {
+                    hints.push({ time: time, message: message });
+                }
+            });
+
+            this.hints = hints;
+        },
+        oneditresize: function(size) {
+            var rows = $("#dialog-form>div:not(.node-input-hints-container-row)");
+            var height = size.height;
+            for (var i=0; i<rows.length; i++) {
+                height -= $(rows[i]).outerHeight(true);
+            }
+            var editorRow = $("#dialog-form>div.node-input-hints-container-row");
+            height -= (parseInt(editorRow.css("marginTop"))+parseInt(editorRow.css("marginBottom")));
+            height += 16;
+            height -= 40; // Extra padding for the add button and list spacing
+            $("#node-input-hints-container").editableList('height',height);
+        }
+    });
+</script>
+
+<script type="text/html" data-template-name="AutomatedHint">
+    <div class="form-row">
+        <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+        <input type="text" id="node-input-name" placeholder="Name">
+    </div>
+    <div class="form-row node-input-hints-container-row">
+        <label for="node-input-hints-container"><i class="fa fa-list"></i> Hints</label>
+        <p style="font-size:0.9em; color:#666; margin:0 0 8px 0;"><i>Time is the interval between hints (for the first hint, time since start)</i></p>
+        <div style="display:flex; flex-direction:column; gap:8px; width:100%;">
+            <ol id="node-input-hints-container" style="list-style-type:none; margin:0; padding:0;"></ol>
+        </div>
+    </div>
+</script>
+
+<script type="text/html" data-help-name="AutomatedHint">
+    <p>A simple node that provides automated hints based on time elapsed. Times and hints can be configured in the node settings.</p>
+</script>

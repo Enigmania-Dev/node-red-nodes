@@ -1,0 +1,16 @@
+{
+  "name": "@enigmania/automated_hint_node",
+  "version": "1.0.2",
+  "description": "Allows sending multiple hints at specified time intervals using a global timer.",
+  "main": "automatedHint.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Maya Bach (M.Bach@enigmania.de)",
+  "license": "ISC",
+   "node-red" : {
+        "nodes": {
+            "AutomatedHint": "automatedHint.js"
+        }
+    }
+}
