@@ -41,9 +41,15 @@ module.exports = function (RED) {
                     shape: "dot",
                     text: "Solved after " + nodeContext.get("hintIndex") + " hints"
                 });
-                node.send({ topic: "ARM", payload: -1 }); // Send ARM message to arm the next node,
-                // restart counter for the next puzzle (since last hint or solved)
-                return;
+                // compute the time when the next hint should have come:
+                const hint = hints[nodeContext.get("hintIndex")];
+                if (!hint) {
+                    node.send({ topic: "ARM", payload: -1 }); // Send ARM message to arm the next node,
+                    // restart counter for the next puzzle (since last hint or solved)
+                    return;
+                }
+                const nextHintTime = nodeContext.get("lastHintTime") + hint.time;
+                node.send({ topic: "ARM", payload: nextHintTime }); // Send ARM message to arm the next node with the time when the next hint would have come
             }
             // If this is arm/disarm message
             if (msg.topic == "ARM") {
