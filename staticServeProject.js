@@ -27,7 +27,7 @@ let StaticInitFunc = function (RED) {
       });
     });
   }
-  RED.nodes.registerType("static", StaticNode);
+  RED.nodes.registerType("staticProject", StaticNode);
 };
 
 module.exports = StaticInitFunc;
