@@ -1,16 +1,23 @@
 {
-  "name": "@enigmania/automated_hint_node",
-  "version": "1.0.3",
-  "description": "Allows sending multiple hints at specified time intervals using a global timer.",
+  "name": "@enigmania/hint-helpers",
+  "version": "1.1.0",
+  "description": "helper functions for handling hints and serving static files in enigmania",
   "main": "automatedHint.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "Maya Bach (M.Bach@enigmania.de)",
+  "dependencies": {
+    "serve-static": "^1.15.0"
+  },
   "license": "ISC",
    "node-red" : {
         "nodes": {
-            "AutomatedHint": "automatedHint.js"
+            "AutomatedHint": "automatedHint.js",
+            "staticProject": "staticServeProject.js"
         }
     }
 }
+
+
+  
