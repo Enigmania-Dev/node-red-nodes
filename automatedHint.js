@@ -47,6 +47,7 @@ module.exports = function (RED) {
             }
             // If this is arm/disarm message
             if (msg.topic == "ARM") {
+                if (nodeContext.get("armed") == true) return
                 nodeContext.set("armed", true);
                 nodeContext.set("lastHintTime", msg.payload); // set lastHintTime to the time when the node was armed
                 node.status({
