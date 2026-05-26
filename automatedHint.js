@@ -21,8 +21,6 @@ module.exports = function (RED) {
         nodeContext.set("hintIndex", 0);  // Start with the first hint
         nodeContext.set("lastHintTime", 0);  // Time when the last hint was given
 
-        node.warn("AutomatedHintNode initialized with (autoArm): " + JSON.stringify(config.autoArm) + " and hints: " + JSON.stringify(hints));
-
         node.on('input', function (msg) {
             // If this is reset message
             if (msg.topic == "RESET") {
