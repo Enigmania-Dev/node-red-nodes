@@ -66,17 +66,24 @@ module.exports = function (RED) {
                 || !("timeElapsed" in msg) // not a time Message
                 || hints.length === 0 // no hints configured
             ) {
-                if (msg.gameState != "playing") {
+                if (nodeContext.get("solved")) {
                     node.status({
-                        fill: "yellow",
-                        shape: "ring",
-                        text: "Not Playing"
+                        fill: "grey",
+                        shape: "dot",
+                        text: "Solved after " + nodeContext.get("hintIndex") + " hints"
                     });
-                } else if (hints.length === 0) {
+                }
+                else if (hints.length === 0) {
                     node.status({
                         fill: "grey",
                         shape: "dot",
                         text: "No hints configured"
+                    });
+                } else if (msg.gameState != "playing") {
+                    node.status({
+                        fill: "yellow",
+                        shape: "ring",
+                        text: "Not Playing"
                     });
                 } else if (nodeContext.get("armed") == false) {
                     node.status({
@@ -84,7 +91,7 @@ module.exports = function (RED) {
                         shape: "ring",
                         text: "Wait for previous hint"
                     });
-                }
+                } 
                 return;
             }
 
