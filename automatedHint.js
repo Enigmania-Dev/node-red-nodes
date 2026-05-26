@@ -1,3 +1,12 @@
+function formatSeconds(seconds) {
+    if (seconds < 60) {
+        return `${seconds}s`;
+    }
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes}m ${remainingSeconds}s`;
+}
+
 module.exports = function (RED) {
     function AutomatedHintNode(config) {
         RED.nodes.createNode(this, config);
@@ -54,7 +63,27 @@ module.exports = function (RED) {
                 || nodeContext.get("armed") == false // not armed yet
                 || nodeContext.get("solved") // already solved riddle
                 || !("timeElapsed" in msg) // not a time Message
+                || hints.length === 0 // no hints configured
             ) {
+                if (msg.gameState != "playing") {
+                    node.status({
+                        fill: "yellow",
+                        shape: "ring",
+                        text: "Not Playing"
+                    });
+                } else if (hints.length === 0) {
+                    node.status({
+                        fill: "grey",
+                        shape: "dot",
+                        text: "No hints configured"
+                    });
+                } else if (nodeContext.get("armed") == false) {
+                    node.status({
+                        fill: "blue",
+                        shape: "ring",
+                        text: "Wait for previous hint"
+                    });
+                }
                 return;
             }
 
@@ -90,9 +119,18 @@ module.exports = function (RED) {
 
             // Update node status with the time until the next hint or indicate that there are no more hints
             if (timeToNextHint !== Infinity) {
-                node.status({ fill: "blue", shape: "ring", text: `Hint ${nodeContext.get("hintIndex")+1} in ${timeToNextHint - elapsedSeconds}s` });
+                const timeStr = formatSeconds(timeToNextHint - (elapsedSeconds - nodeContext.get("lastHintTime")));
+                node.status({
+                    fill: "green",
+                    shape: "ring",
+                    text: `Hint ${nodeContext.get("hintIndex")+1} in ${timeStr}`
+                });
             } else {
-                node.status({ fill: "blue", shape: "ring", text: `No more hints` });
+                node.status({
+                    fill: "red",
+                    shape: "dot",
+                    text: `No more hints`
+                });
             }
             
             return;
