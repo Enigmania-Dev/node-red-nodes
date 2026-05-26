@@ -8,16 +8,17 @@ module.exports = function (RED) {
 
         // Initialize context variables
         nodeContext.set("solved", false);  // Unsolved by default
+        nodeContext.set("armed", config.autoArm == "true");  // Armed by default
         nodeContext.set("hintIndex", 0);  // Start with the first hint
         nodeContext.set("lastHintTime", 0);  // Time when the last hint was given
 
-        node.warn("AutomatedHintNode initialized with hints: " + JSON.stringify(hints));
+        node.warn("AutomatedHintNode initialized with (autoArm): " + JSON.stringify(config.autoArm) + " and hints: " + JSON.stringify(hints));
 
         node.on('input', function (msg) {
-
             // If this is reset message
             if (msg.topic == "RESET") {
                 nodeContext.set("solved", false);
+                nodeContext.set("armed", config.autoArm == "true");
                 nodeContext.set("hintIndex", 0);
                 nodeContext.set("lastHintTime", 0);
                 node.status({});
@@ -26,13 +27,31 @@ module.exports = function (RED) {
             // If this is solved message
             if (msg.topic == "SOLVED") {
                 nodeContext.set("solved", true);
-                node.status({ fill: "grey", shape: "ring", text: "Solved after " + nodeContext.get("hintIndex") + " hints" });
+                node.status({
+                    fill: "grey",
+                    shape: "dot",
+                    text: "Solved after " + nodeContext.get("hintIndex") + " hints"
+                });
+                node.send({ topic: "ARM", payload: -1 }); // Send ARM message to arm the next node,
+                // restart counter for the next puzzle (since last hint or solved)
+                return;
+            }
+            // If this is arm/disarm message
+            if (msg.topic == "ARM") {
+                nodeContext.set("armed", true);
+                nodeContext.set("lastHintTime", msg.payload); // set lastHintTime to the time when the node was armed
+                node.status({
+                    fill: "green",
+                    shape: "ring",
+                    text: "Ready"
+                });
                 return;
             }
 
             // Do nothing if:
             if (
                 msg.gameState != "playing" // paused
+                || nodeContext.get("armed") == false // not armed yet
                 || nodeContext.get("solved") // already solved riddle
                 || !("timeElapsed" in msg) // not a time Message
             ) {
@@ -50,12 +69,23 @@ module.exports = function (RED) {
             const hint = hints[hintIndex];
             const timeToNextHint = hint ? hint.time : Infinity;
 
+            // In case the node was just armed, set the lastHintTime to the current elapsed time to start the timer
+            if (nodeContext.get("lastHintTime") < 0) {
+                nodeContext.set("lastHintTime", elapsedSeconds);
+            }
+
             // If next hint is due, send it and update context
             if (elapsedSeconds - nodeContext.get("lastHintTime") >= timeToNextHint) {
                 nodeContext.set("hintIndex", nodeContext.get("hintIndex") + 1);
                 nodeContext.set("lastHintTime", elapsedSeconds);
+                msg.topic = "HINT";
                 msg.payload = hint.message;
                 node.send(msg);
+
+                // If there are no more hints, arm the next node
+                if (nodeContext.get("hintIndex") >= hints.length) {
+                    node.send({ topic: "ARM", payload: nodeContext.get("lastHintTime") }); // Send ARM message to arm the next node
+                }
             }
 
             // Update node status with the time until the next hint or indicate that there are no more hints
