@@ -7,8 +7,8 @@
             autoArm: {value:true, required:true, validate: (v) => v === "true" || v === "false"},
             // Hints should be an array of objects with time and message properties
             // It has to have at least one entry.
-            hints: {value:[],required:true, validate: function(v) {
-                if (!Array.isArray(v) || v.length < 1) {
+            hints: {value:[], required:false, validate: function(v) {
+                if (!Array.isArray(v)) {
                     return false;
                 }
                 for (let hint of v) {
