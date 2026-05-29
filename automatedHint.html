@@ -119,5 +119,47 @@
 </script>
 
 <script type="text/html" data-help-name="AutomatedHint">
-    <p>A simple node that provides automated hints based on time elapsed. Times and hints can be configured in the node settings.</p>
+    <p>
+        This node provides hints based on riddle state and time.
+        It can be configured with a list of hints, each having a time (in seconds) and a message (path to the hint file). 
+        The node will output the hints at the specified intervals after being triggered. 
+        The trigger can be either the start of the puzzle or the previous hint, depending on the configuration.
+    </p>
+
+    <h3>Inputs</h3>
+    <dl class="message-properties">
+        <dt>payload
+            <span class="property-type">string | buffer</span>
+        </dt>
+        <dd> Contains i.e. the time elapsed since the puzzle started in ms. </dd>
+        <dt class="optional">topic <span class="property-type">string</span></dt>
+        <dd> the type of message, decides the behavior of the node:
+            <ul>
+                <li><strong>TIME</strong>: The node will check if it's time to output the next hint based on the elapsed time.</li>
+                <li><strong>ARM</strong>: The node will use the payload as time of last hint and start providing hints based on that.</li>
+                <li><strong>RESET</strong>: The node will be reset to initial state.</li>
+                <li><strong>SOLVED</strong>: The node will mark the puzzle as solved and stop providing hints.</li>
+            </ul>
+        </dd>
+    </dl>
+
+    <h3>Outputs</h3>
+    <ol class="node-ports">
+        <li>Hint output
+            <dl class="message-properties">
+                <dt>topic <span class="property-type">string</span></dt>
+                <dd>the topic is "HINT".</dd>
+                <dt>payload <span class="property-type">string</span></dt>
+                <dd>the hint message filename.</dd>
+            </dl>
+        </li>
+        <li>ARM output
+            <dl class="message-properties">
+                <dt>topic <span class="property-type">string</span></dt>
+                <dd>the topic is "ARM".</dd>
+                <dt>payload <span class="property-type">string</span></dt>
+                <dd>the time when the next hint would have come.</dd>
+            </dl>
+        </li>
+    </ol>
 </script>
