@@ -14,12 +14,14 @@ module.exports = function (RED) {
         const nodeContext = node.context();
         const flowContext = this.context().flow;
         const hints = Array.isArray(config.hints) ? config.hints : [];
+        const conditions = Array.isArray(config.conditions) ? config.conditions : [];
 
 
         // Initialize context variables
         nodeContext.set("hintIndex", 0);  // Start with the first hint
         nodeContext.set("lastHintTime", 0);  // Time when the last hint was given
         nodeContext.set("conditionsValidated", 0); // Whether the conditions have been validated
+        nodeContext.set("conditionsMet", false); // Whether the conditions are currently met
 
         // also add a variable to the flow context to track whether this node's riddle is solved, which can be used as a condition for other nodes
         flowContext.set(config.name+"_solved", false); 
@@ -46,7 +48,7 @@ module.exports = function (RED) {
         });
 
         node.on('input', function (msg) {
-            // check if conditions exist
+            // check if conditions exist on first run
             if (nodeContext.get("conditionsValidated") == 0) {
                 const conditions = Array.isArray(config.conditions) ? config.conditions : [];
                 if (conditions.length > 0) {
@@ -79,7 +81,6 @@ module.exports = function (RED) {
             // If this is reset message
             if (msg.topic == "RESET") {
                 flowContext.set(config.name+"_solved", false);
-                nodeContext.set("armed", config.autoArm == "true");
                 nodeContext.set("hintIndex", 0);
                 nodeContext.set("lastHintTime", 0);
                 node.status({});
@@ -93,15 +94,7 @@ module.exports = function (RED) {
                     shape: "dot",
                     text: "Solved after " + nodeContext.get("hintIndex") + " hints"
                 });
-                // compute the time when the next hint should have come:
-                const hint = hints[nodeContext.get("hintIndex")];
-                if (!hint) {
-                    node.send([null, { topic: "ARM", payload: -1 }]); // Send ARM message to arm the next node,
-                    // restart counter for the next puzzle (since last hint or solved)
-                    return;
-                }
-                const nextHintTime = nodeContext.get("lastHintTime") + hint.time;
-                node.send([null, { topic: "ARM", payload: nextHintTime }]); // Send ARM message to arm the next node with the time when the next hint would have come
+                return;
             }
 
             // Do nothing if:
@@ -110,6 +103,7 @@ module.exports = function (RED) {
                 || flowContext.get(config.name+"_solved") // already solved riddle
                 || msg.topic != "TIME" // only react to time messages
                 || hints.length === 0 // no hints configured
+                || hints.length <= nodeContext.get("hintIndex") // all hints already given
             ) {
                 if (flowContext.get(config.name+"_solved")) {
                     node.status({
@@ -124,19 +118,20 @@ module.exports = function (RED) {
                         shape: "dot",
                         text: "No hints configured"
                     });
+                } else if(hints.length <= nodeContext.get("hintIndex")) {
+                    node.status({
+                        fill: "red",
+                        shape: "dot",
+                        text: "No more hints"
+                    });
+
                 } else if (msg.gameState != "playing") {
                     node.status({
                         fill: "yellow",
                         shape: "ring",
                         text: "Not Playing"
                     });
-                } else if (nodeContext.get("armed") == false) {
-                    node.status({
-                        fill: "blue",
-                        shape: "ring",
-                        text: "Wait for previous hint"
-                    });
-                } 
+                }
                 return;
             }
 
@@ -147,14 +142,28 @@ module.exports = function (RED) {
                 return;
             }
 
-            const hintIndex = nodeContext.get("hintIndex");
-            const hint = hints[hintIndex];
-            const timeToNextHint = hint ? hint.time : Infinity;
-
-            // In case the node was just armed, set the lastHintTime to the current elapsed time to start the timer
-            if (nodeContext.get("lastHintTime") < 0) {
-                nodeContext.set("lastHintTime", elapsedSeconds);
+            // Evaluate conditions:
+            allConditionsMet = conditions.every(condition => flowContext.get(condition+"_solved") === true);
+            // If all conditions are met and we haven't already marked them as met, do so now
+            if (allConditionsMet && nodeContext.get("conditionsMet") === false) {
+                if (config.mode === "STATE") {
+                    // Start timer now
+                    nodeContext.set("lastHintTime", elapsedSeconds);
+                }
+                nodeContext.set("conditionsMet", true);
             }
+
+            if (allConditionsMet == false && config.mode === "STATE") {
+                node.status({
+                    fill: "blue",
+                    shape: "ring",
+                    text: "Waiting for conditions"
+                });
+                return; // If any condition is not met, do not proceed
+            } 
+
+            const hint = hints[nodeContext.get("hintIndex")];
+            const timeToNextHint = hint ? hint.time : Infinity;
 
             // If next hint is due, send it and update context
             if (elapsedSeconds - nodeContext.get("lastHintTime") >= timeToNextHint) {
@@ -163,12 +172,7 @@ module.exports = function (RED) {
                 msg.topic = "HINT";
                 msg.payload = hint.message;
                 
-                // If there are no more hints, arm the next node
-                if (nodeContext.get("hintIndex") >= hints.length) {
-                    node.send([msg, { topic: "ARM", payload: nodeContext.get("lastHintTime") }]); // Send ARM message to arm the next node
-                } else {
-                    node.send([msg, null]);
-                }
+                node.send(msg);
             }
 
             // Update node status with the time until the next hint or indicate that there are no more hints
@@ -178,12 +182,6 @@ module.exports = function (RED) {
                     fill: "green",
                     shape: "ring",
                     text: `Hint ${nodeContext.get("hintIndex")+1} in ${timeStr}`
-                });
-            } else {
-                node.status({
-                    fill: "red",
-                    shape: "dot",
-                    text: `No more hints`
                 });
             }
             
