@@ -42,12 +42,12 @@ module.exports = function (RED) {
                 // compute the time when the next hint should have come:
                 const hint = hints[nodeContext.get("hintIndex")];
                 if (!hint) {
-                    node.send({ topic: "ARM", payload: -1 }); // Send ARM message to arm the next node,
+                    node.send([null, { topic: "ARM", payload: -1 }]); // Send ARM message to arm the next node,
                     // restart counter for the next puzzle (since last hint or solved)
                     return;
                 }
                 const nextHintTime = nodeContext.get("lastHintTime") + hint.time;
-                node.send({ topic: "ARM", payload: nextHintTime }); // Send ARM message to arm the next node with the time when the next hint would have come
+                node.send([null, { topic: "ARM", payload: nextHintTime }]); // Send ARM message to arm the next node with the time when the next hint would have come
             }
             // If this is arm/disarm message
             if (msg.topic == "ARM") {
@@ -67,7 +67,7 @@ module.exports = function (RED) {
                 msg.gameState != "playing" // paused
                 || nodeContext.get("armed") == false // not armed yet
                 || nodeContext.get("solved") // already solved riddle
-                || !("timeElapsed" in msg) // not a time Message
+                || msg.topic != "TIME" // only react to time messages
                 || hints.length === 0 // no hints configured
             ) {
                 if (nodeContext.get("solved")) {
@@ -100,9 +100,9 @@ module.exports = function (RED) {
             }
 
             // convert timeElapsed to seconds and find the hint for the current elapsed time
-            const elapsedSeconds = Math.floor(Number(msg.timeElapsed) / 1000);
+            const elapsedSeconds = Math.floor(Number(msg.payload) / 1000);
             if (isNaN(elapsedSeconds)) {
-                node.warn("Received invalid timeElapsed value: " + msg.timeElapsed);
+                node.warn("Received invalid timeElapsed value: " + msg.payload);
                 return;
             }
 
@@ -121,11 +121,12 @@ module.exports = function (RED) {
                 nodeContext.set("lastHintTime", elapsedSeconds);
                 msg.topic = "HINT";
                 msg.payload = hint.message;
-                node.send(msg);
-
+                
                 // If there are no more hints, arm the next node
                 if (nodeContext.get("hintIndex") >= hints.length) {
-                    node.send({ topic: "ARM", payload: nodeContext.get("lastHintTime") }); // Send ARM message to arm the next node
+                    node.send([msg, { topic: "ARM", payload: nodeContext.get("lastHintTime") }]); // Send ARM message to arm the next node
+                } else {
+                    node.send([msg, null]);
                 }
             }
 
