@@ -12,19 +12,73 @@ module.exports = function (RED) {
         RED.nodes.createNode(this, config);
         var node = this;
         const nodeContext = node.context();
+        const flowContext = this.context().flow;
         const hints = Array.isArray(config.hints) ? config.hints : [];
 
 
         // Initialize context variables
-        nodeContext.set("solved", false);  // Unsolved by default
-        nodeContext.set("armed", config.autoArm == "true");  // Armed by default
         nodeContext.set("hintIndex", 0);  // Start with the first hint
         nodeContext.set("lastHintTime", 0);  // Time when the last hint was given
+        nodeContext.set("conditionsValidated", 0); // Whether the conditions have been validated
+
+        // also add a variable to the flow context to track whether this node's riddle is solved, which can be used as a condition for other nodes
+        flowContext.set(config.name+"_solved", false); 
+        // Add self to the list of hint nodes in the flow context
+        let hintNodes = flowContext.get("hintNodes") || [];
+        if (hintNodes.includes(config.name)) {
+            node.warn(`A node with the name "${config.name}" already exists in the flow context. Please ensure unique names for each AutomatedHint node.`);
+            node.status({
+                fill: "red",
+                shape: "dot",
+                text: `Duplicate node name in flow context`
+            });
+            return;
+        }
+        hintNodes.push(config.name);
+        flowContext.set("hintNodes", hintNodes);
+
+        node.on('close', function() {
+            // Remove self from the list of hint nodes in the flow context
+            let hintNodes = flowContext.get("hintNodes") || [];
+            hintNodes = hintNodes.filter(name => name !== config.name);
+            flowContext.set("hintNodes", hintNodes);
+            flowContext.set(config.name+"_solved", false);
+        });
 
         node.on('input', function (msg) {
+            // check if conditions exist
+            if (nodeContext.get("conditionsValidated") == 0) {
+                const conditions = Array.isArray(config.conditions) ? config.conditions : [];
+                if (conditions.length > 0) {
+                    const knownNodes = flowContext.get("hintNodes") || [];
+                    const allConditionsMet = conditions.every(condition => {
+                        // check if condition is the name of a node in the flow context
+                        return (
+                            knownNodes.includes(condition) 
+                            || node.warn(
+                                `Condition "${condition}" is not the name of any riddle-node in the flow context. Please check your conditions.`
+                            ));
+                        
+                    });
+                    if (!allConditionsMet) {
+                        node.warn(`Conditions: ${flowContext.get("hintNodes")} - ${conditions}`);
+                        node.status({
+                            fill: "red",
+                            shape: "dot",
+                            text: `Invalid conditions`
+                        });
+                        nodeContext.set("conditionsValidated", -1);
+                        return; // If any condition is not met, do not proceed
+                    }
+                    nodeContext.set("conditionsValidated", 1);
+                }
+            } else if (nodeContext.get("conditionsValidated") == -1) {
+                return; // If conditions were previously found to be invalid, do not proceed
+            }
+
             // If this is reset message
             if (msg.topic == "RESET") {
-                nodeContext.set("solved", false);
+                flowContext.set(config.name+"_solved", false);
                 nodeContext.set("armed", config.autoArm == "true");
                 nodeContext.set("hintIndex", 0);
                 nodeContext.set("lastHintTime", 0);
@@ -33,7 +87,7 @@ module.exports = function (RED) {
             }
             // If this is solved message
             if (msg.topic == "SOLVED") {
-                nodeContext.set("solved", true);
+                flowContext.set(config.name+"_solved", true);
                 node.status({
                     fill: "grey",
                     shape: "dot",
@@ -49,28 +103,15 @@ module.exports = function (RED) {
                 const nextHintTime = nodeContext.get("lastHintTime") + hint.time;
                 node.send([null, { topic: "ARM", payload: nextHintTime }]); // Send ARM message to arm the next node with the time when the next hint would have come
             }
-            // If this is arm/disarm message
-            if (msg.topic == "ARM") {
-                if (nodeContext.get("armed") == true) return
-                nodeContext.set("armed", true);
-                nodeContext.set("lastHintTime", msg.payload); // set lastHintTime to the time when the node was armed
-                node.status({
-                    fill: "green",
-                    shape: "ring",
-                    text: "Ready"
-                });
-                return;
-            }
 
             // Do nothing if:
             if (
                 msg.gameState != "playing" // paused
-                || nodeContext.get("armed") == false // not armed yet
-                || nodeContext.get("solved") // already solved riddle
+                || flowContext.get(config.name+"_solved") // already solved riddle
                 || msg.topic != "TIME" // only react to time messages
                 || hints.length === 0 // no hints configured
             ) {
-                if (nodeContext.get("solved")) {
+                if (flowContext.get(config.name+"_solved")) {
                     node.status({
                         fill: "grey",
                         shape: "dot",
