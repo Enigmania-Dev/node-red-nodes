@@ -19,12 +19,13 @@ module.exports = function (RED) {
 
         // Initialize context variables
         nodeContext.set("hintIndex", 0);  // Start with the first hint
-        nodeContext.set("lastHintTime", 0);  // Time when the last hint was given
+        nodeContext.set("timer", 0);  // Time when the last hint was given
         nodeContext.set("conditionsValidated", 0); // Whether the conditions have been validated
         nodeContext.set("conditionsMet", false); // Whether the conditions are currently met
 
         // also add a variable to the flow context to track whether this node's riddle is solved, which can be used as a condition for other nodes
         flowContext.set(config.name+"_solved", false); 
+
         // Add self to the list of hint nodes in the flow context
         let hintNodes = flowContext.get("hintNodes") || [];
         if (hintNodes.includes(config.name)) {
@@ -38,7 +39,8 @@ module.exports = function (RED) {
         }
         hintNodes.push(config.name);
         flowContext.set("hintNodes", hintNodes);
-
+        
+        // When the node is closed, remove it from the flow context and mark its riddle as unsolved
         node.on('close', function() {
             // Remove self from the list of hint nodes in the flow context
             let hintNodes = flowContext.get("hintNodes") || [];
@@ -67,7 +69,7 @@ module.exports = function (RED) {
                         node.status({
                             fill: "red",
                             shape: "dot",
-                            text: `Invalid conditions`
+                            text: `Depends on unknown riddle`
                         });
                         nodeContext.set("conditionsValidated", -1);
                         return; // If any condition is not met, do not proceed
@@ -82,7 +84,7 @@ module.exports = function (RED) {
             if (msg.topic == "RESET") {
                 flowContext.set(config.name+"_solved", false);
                 nodeContext.set("hintIndex", 0);
-                nodeContext.set("lastHintTime", 0);
+                nodeContext.set("timer", 0);
                 node.status({});
                 return;
             }
@@ -147,8 +149,8 @@ module.exports = function (RED) {
             // If all conditions are met and we haven't already marked them as met, do so now
             if (allConditionsMet && nodeContext.get("conditionsMet") === false) {
                 if (config.mode === "STATE") {
-                    // Start timer now
-                    nodeContext.set("lastHintTime", elapsedSeconds);
+                    // Start timer now, only if we are in state-based mode, in time-based mode the timer starts with the game
+                    nodeContext.set("timer", elapsedSeconds);
                 }
                 nodeContext.set("conditionsMet", true);
             }
@@ -163,12 +165,37 @@ module.exports = function (RED) {
             } 
 
             const hint = hints[nodeContext.get("hintIndex")];
-            const timeToNextHint = hint ? hint.time : Infinity;
+            // Calculate time to next hint based on mode
+            let nextHintTime = Infinity;
+            if (config.mode === "TIME") {
+                nextHintTime = hint.time;
+            } else if (config.mode === "STATE") {
+                const minTime = hint.min || 0;
+                const maxTime = hint.max || Infinity;
+                const targetTime = hint.targetTime || null;
+
+                // If targetTime is specified, calculate the optimal time to trigger the hint
+                if (targetTime !== null) {
+                    const earliestTriggerTime = nodeContext.get("timer") + minTime;
+                    const latestTriggerTime = nodeContext.get("timer") + maxTime;
+
+                    if (earliestTriggerTime > targetTime) {
+                        nextHintTime = minTime; // Trigger as soon as possible after minTime
+                    } else if (latestTriggerTime < targetTime) {
+                        nextHintTime = maxTime; // Trigger as late as possible before maxTime
+                    } else {
+                        nextHintTime = targetTime - nodeContext.get("timer"); // Trigger at targetTime
+                    }
+                } else {
+                    // If no targetTime, trigger as soon as minTime has passed
+                    nextHintTime = minTime;
+                }
+            }
 
             // If next hint is due, send it and update context
-            if (elapsedSeconds - nodeContext.get("lastHintTime") >= timeToNextHint) {
+            if (elapsedSeconds - nodeContext.get("timer") >= nextHintTime) {
                 nodeContext.set("hintIndex", nodeContext.get("hintIndex") + 1);
-                nodeContext.set("lastHintTime", elapsedSeconds);
+                nodeContext.set("timer", elapsedSeconds);
                 msg.topic = "HINT";
                 msg.payload = hint.message;
                 
@@ -176,8 +203,8 @@ module.exports = function (RED) {
             }
 
             // Update node status with the time until the next hint or indicate that there are no more hints
-            if (timeToNextHint !== Infinity) {
-                const timeStr = formatSeconds(timeToNextHint - (elapsedSeconds - nodeContext.get("lastHintTime")));
+            if (nextHintTime !== Infinity) {
+                const timeStr = formatSeconds(Math.max(0, nextHintTime - (elapsedSeconds - nodeContext.get("timer"))));
                 node.status({
                     fill: "green",
                     shape: "ring",
