@@ -13,6 +13,11 @@
         font-family: var(--red-ui-primary-font);
         display: contents !important;
     }
+    .unit {
+        position: relative;
+        top: -1px;
+        right: 45px;
+    }
 </style>
 <script type="text/javascript">
     function switchMode() {
@@ -30,6 +35,10 @@
         $("#targetTimeLabel").attr("title", "The node will try to trigger the hint as close as possible to this time. Measured in seconds since game start.");
         $("#maxLabel").attr("title", "The maximum time after the timer started, before the hint is triggered.");
         setHeights();
+        // run validation to show/hide relevant errors based on mode
+        $("#node-input-hints-container").editableList("items").each(function() {
+            validateHint(this);
+        });
     }
 
     function setHeights(size) {
@@ -204,16 +213,20 @@
                     '<div style="display:flex; gap:8px; align-items:center; width:100%; flex-wrap:wrap;">' +
                         '<label style="flex-shrink:0;" class="time-hint">Time:</label>' +
                         '<input type="number" class="node-input-hint-time time-hint required" min="0" step="1" style="width:110px;">' +
+                        '<span class="unit time-hint">s</span>' +
                         '<label style="flex-shrink:0;" class="state-hint">Min:</label>' +
                         '<input type="number" class="node-input-hint-min state-hint required" min="0" step="1" style="width:110px;">' +
+                        '<span class="unit state-hint">s</span>' +
                         '<div style="flex-basis:100%; height:0;"></div>' + // Line break
                         '<label style="flex-shrink:0;">Hint:</label>' +
                         '<input type="text" class="node-input-hint-message required" placeholder="Path to hint file" style="flex:1;">' +
                         '<div style="flex-basis:100%; height:0; class="state-hint"></div>' + // Line break
                         '<label style="flex-shrink:0;" class="state-hint optional" id="maxLabel">Max:</label>' +
                         '<input type="number" class="node-input-hint-max state-hint" min="0" step="1" style="width:110px;">' +
+                        '<span class="unit state-hint">s</span>' +
                         '<label style="flex-shrink:0;" class="state-hint optional" id="targetTimeLabel">TargetTime (absolute):</label>' +
                         '<input type="number" class="node-input-hint-target state-hint" min="0" step="1" style="width:110px;">' +
+                        '<span class="unit state-hint">s</span>' +
                     '</div>'
                 );
 
@@ -236,7 +249,6 @@
                 addItem: function(container, i, hint) {
                     container.append(createHintRow(hint));
                     switchMode();
-                    validateHint(container.children().last());
                 }
             });
 
