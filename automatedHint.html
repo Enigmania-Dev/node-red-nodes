@@ -392,7 +392,7 @@
                 After each hint the timer is reset, so the times are cumulative and order matters.
             </li>
             <li><a href="#state-based-mode"><strong>State-based mode:</strong></a>
-                The timer only starts when all specified riddles are solved.
+                The timer only starts when all specified riddles are solved or a ready message is received.
                 Hints are then triggered after a certain amount of time has passed since the solving or previous hint.
                 Times are cumulative and order matters.
             </li>
@@ -411,6 +411,7 @@
                 <li><strong>TIME</strong>: The node will check if it's time to output the next hint based on the elapsed time.</li>
                 <li><strong>RESET</strong>: The node will be reset to initial state.</li>
                 <li><strong>SOLVED</strong>: The node will mark the puzzle as solved and stop providing hints.</li>
+                <li><strong>CONDITIONS_MET</strong>: The node will mark the conditions as met. Overrides the conditions list, alternatively if node depends not on another riddle but a message.</li>
             </ul>
         </dd>
     </dl>

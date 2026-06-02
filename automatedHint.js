@@ -22,6 +22,7 @@ module.exports = function (RED) {
         nodeContext.set("timer", 0);  // Time when the last hint was given
         nodeContext.set("conditionsValidated", 0); // Whether the conditions have been validated
         nodeContext.set("conditionsMet", false); // Whether the conditions are currently met
+        nodeContext.set("forceReady", false); // Whether the node has been forced ready
 
         // also add a variable to the flow context to track whether this node's riddle is solved, which can be used as a condition for other nodes
         flowContext.set(config.name+"_solved", false); 
@@ -85,6 +86,7 @@ module.exports = function (RED) {
                 flowContext.set(config.name+"_solved", false);
                 nodeContext.set("hintIndex", 0);
                 nodeContext.set("timer", 0);
+                nodeContext.set("forceReady", false);
                 node.status({});
                 return;
             }
@@ -98,6 +100,12 @@ module.exports = function (RED) {
                 });
                 return;
             }
+            // If this is a force ready message
+            if (msg.topic == "CONDITIONS_MET") {
+                nodeContext.set("forceReady", true);
+                return;
+            }
+
 
             // Do nothing if:
             if (
@@ -145,7 +153,15 @@ module.exports = function (RED) {
             }
 
             // Evaluate conditions:
-            allConditionsMet = conditions.every(condition => flowContext.get(condition+"_solved") === true);
+            allConditionsMet = (
+                ( // If no conditions, wait for force ready message, otherwise check conditions
+                    conditions.length > 0
+                    && conditions.every(
+                        condition => flowContext.get(condition+"_solved") === true
+                    )
+                )
+                || nodeContext.get("forceReady") === true // allow to force conditions met via message
+            );
             // If all conditions are met and we haven't already marked them as met, do so now
             if (allConditionsMet && nodeContext.get("conditionsMet") === false) {
                 if (config.mode === "STATE") {

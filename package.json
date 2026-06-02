@@ -1,6 +1,6 @@
 {
   "name": "@enigmania/hint-helpers",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "helper functions for handling hints and serving static files in enigmania",
   "main": "automatedHint.js",
   "scripts": {
