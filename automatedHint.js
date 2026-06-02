@@ -59,7 +59,8 @@ module.exports = function (RED) {
                     const allConditionsMet = conditions.every(condition => {
                         // check if condition is the name of a node in the flow context
                         return (
-                            knownNodes.includes(condition) 
+                            knownNodes.includes(condition)
+                            && condition != config.name // also check that the node does not depend on itself, which would lead to a deadlock
                             || node.warn(
                                 `Condition "${condition}" is not the name of any riddle-node in the flow context. Please check your conditions.`
                             ));
