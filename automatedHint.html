@@ -201,7 +201,7 @@
         outputLabels: ["Hint data"],
         icon: "file.svg",
         label: function() {
-            return this.name||"AutomatedHint";
+            return (this.mode === "TIME" ? "T: " : "S: ") + (this.name||"AutomatedHint");
         },
         oneditprepare: function() {
             // HINTS
