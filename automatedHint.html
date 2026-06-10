@@ -1,18 +1,195 @@
+<style>
+    .input-error {
+        border-color: red;
+    }
+    .optional {
+        font-style: italic;
+        color: #666;
+    }
+    .property-optional::after {
+        content: "optional" !important;
+        color: var(--red-ui-primary-text-color);
+        font-style: italic;
+        font-family: var(--red-ui-primary-font);
+        display: contents !important;
+    }
+    .unit {
+        position: relative;
+        top: -1px;
+        right: 45px;
+    }
+</style>
 <script type="text/javascript">
+    function switchMode() {
+        const mode = $("#node-input-mode").val();
+        if (mode === "STATE") {
+            $("#conditions-row").show();
+            $(".state-hint").show();
+            $(".time-hint").hide();
+        } else {
+            $("#conditions-row").hide();
+            $(".state-hint").hide();
+            $(".time-hint").show();
+        }
+        $(".optional").attr("title", "Optional");
+        $("#targetTimeLabel").attr("title", "The node will try to trigger the hint as close as possible to this time. Measured in seconds since game start.");
+        $("#maxLabel").attr("title", "The maximum time after the timer started, before the hint is triggered.");
+        setHeights();
+        // run validation to show/hide relevant errors based on mode
+        $("#node-input-hints-container").editableList("items").each(function() {
+            validateHint(this);
+        });
+    }
+
+    function setHeights(size) {
+        var rows = $("#dialog-form>div:not(.list-container-row)");
+        var height = size && size.height || $("#dialog-form").height();
+        for (var i=0; i<rows.length; i++) {
+            height -= $(rows[i]).outerHeight(true);
+        }
+        var editorRow = $("#dialog-form>div.list-container-row:visible");
+        height -= editorRow.length * (parseInt(editorRow.css("marginTop"))+parseInt(editorRow.css("marginBottom")));
+        height -= editorRow.length * 20; // Extra padding for the add button and list spacing
+        var editorContent = editorRow.children(":not(div)");
+        height -= editorContent.length * editorContent.outerHeight(true);
+        // divide half between conditions and hints
+        for (var i=0; i<editorRow.length; i++) {
+            $(editorRow[i]).find(".red-ui-editableList-container").height(height/editorRow.length);
+        }
+    }
+
+    function validateHint(row) {
+        var hasErrors = false;
+        for (let input of $(row).find("input:visible")) {
+            $(input).removeClass("input-error");
+            $(input).removeAttr("title");
+            if (input.type === "number") {
+                const val = Number.parseInt($(input).val(), 10);
+                if (
+                    $(input).hasClass("required")
+                    && (
+                        !Number.isInteger(val) 
+                        || val < 0
+                    )
+                ) {
+                    $(input).addClass("input-error");
+                    $(input).attr("title", "Please enter a non-negative integer");
+                    hasErrors = true;
+                }
+                if ($(input).hasClass("node-input-hint-max")) {
+                    const minVal = Number.parseInt( $(row).find(".node-input-hint-min").val(), 10);
+                    if (Number.isInteger(minVal) && val < minVal) {
+                        $(input).addClass("input-error");
+                        $(input).attr("title", "Please enter a value greater than or equal to the minimum");
+                        hasErrors = true;
+                    }
+                    const targetVal = Number.parseInt( $(row).find(".node-input-hint-target").val(), 10);
+                    if (Number.isInteger(targetVal) && targetVal > 0 && (!Number.isInteger(val) || val <= 0)) {
+                        $(input).addClass("input-error");
+                        $(input).attr("title", "Max time is required when target time is specified and should be a positive integer");
+                        hasErrors = true;
+                    }
+                }
+                if ($(input).hasClass("node-input-hint-target")) {
+                    const maxVal = Number.parseInt( $(row).find(".node-input-hint-max").val(), 10);
+                     if (Number.isInteger(maxVal) && maxVal > 0 && (!Number.isInteger(val) || val <= 0)) {
+                        $(input).addClass("input-error");
+                        $(input).attr("title", "Target time is required when max time is specified and should be a positive integer");
+                        hasErrors = true;
+                    }
+                }
+                
+            } else if (input.type === "text") {
+                if (
+                    $(input).hasClass("required")
+                    && (
+                        typeof $(input).val() !== "string" 
+                        || $(input).val().trim() === ""
+                    )
+                ) {
+                    $(input).addClass("input-error");
+                    $(input).attr("title", "Please enter a valid file path");
+                    hasErrors = true;
+                }
+            }
+        }
+        if (hasErrors) {
+            $("#node-dialog-ok").addClass("disabled");
+            $("#node-dialog-ok").off("click.validation").on("click.validation", function(event) {
+                event.preventDefault();
+                event.stopPropagation();
+                RED.notify("Please fix validation errors before saving.", "error");
+            });
+        } else {
+            $("#node-dialog-ok").removeClass("disabled");
+            $("#node-dialog-ok").off("click.validation");
+        }
+    }
     RED.nodes.registerType('AutomatedHint',{
         category: 'function',
         color: '#a6bbcf',
         defaults: {
             name: {value:""},
-            autoArm: {value:true, required:true, validate: (v) => v === "true" || v === "false"},
+            mode: {value: "TIME", required: true, validate: function(v) {
+                return ["TIME", "STATE"].includes(v);
+            }},
+            // Conditions should be an array of strings, but it's optional and can be empty
+            conditions: {value:[], required:false, validate: function(v) {
+                if (!Array.isArray(v)) {
+                    return false;
+                }
+                for (let condition of v) {
+                    if (typeof condition !== 'string') {
+                        return false;
+                    }
+                }
+                return true;
+            }},
             // Hints should be an array of objects with time and message properties
-            // It has to have at least one entry.
             hints: {value:[], required:false, validate: function(v) {
                 if (!Array.isArray(v)) {
                     return false;
                 }
                 for (let hint of v) {
-                    if (!Number.isInteger(hint.time) || typeof hint.message !== 'string') {
+                    // TIME Hint
+                    // - time is required and should be an integer
+                    // - message is required and should be a string
+                    // STATE Hint
+                    // - min is required and should be an integer
+                    // - max is optional but if present should be an integer
+                    // - target is optional but if present should be an integer
+                    // - message is required and should be a string
+
+                    // Check that it is either a TIME hint or a STATE hint
+                    if (
+                        // Message is required either way and should be a string
+                        typeof hint.message !== 'string'
+                        // One of the two types of hints should be respected
+                        || (
+                            !hint.hasOwnProperty("time") &&
+                            !hint.hasOwnProperty("min")
+                        )
+                        // If it's a TIME hint, time should be a positive integer
+                        || ( hint.hasOwnProperty("time") &&
+                            (
+                                !Number.isInteger(hint.time) ||
+                                hint.time < 0 ||
+                                // TIME hints should not have STATE properties
+                                (hint.hasOwnProperty("min") || hint.hasOwnProperty("max") || hint.hasOwnProperty("target"))
+                            )
+                        )
+                        // If it's a STATE hint, min should be an integer and time should not be present
+                        || ( hint.hasOwnProperty("min") &&
+                            (
+                                !Number.isInteger(hint.min) ||
+                                hint.min < 0 ||
+                                (hint.hasOwnProperty("max") && (!Number.isInteger(hint.max) || hint.max < hint.min)) ||
+                                (hint.hasOwnProperty("target") && !Number.isInteger(hint.target)) ||
+                                // STATE hints should not have TIME properties
+                                hint.hasOwnProperty("time")
+                            )
+                        )
+                    ) {
                         return false;
                     }
                 }
@@ -20,27 +197,48 @@
             }}
         },
         inputs: 1,
-        outputs: 2,
+        outputs: 1,
+        outputLabels: ["Hint data"],
         icon: "file.svg",
         label: function() {
-            return this.name||"AutomatedHint";
+            return (this.mode === "TIME" ? "T: " : "S: ") + (this.name||"AutomatedHint");
         },
         oneditprepare: function() {
+            // HINTS
             const hintsContainer = $("#node-input-hints-container");
             const hints = Array.isArray(this.hints) ? this.hints : [];
 
             function createHintRow(hint) {
                 const row = $(
-                    '<div style="display:flex; gap:8px; align-items:center; width:100%;">' +
-                        '<label style="flex-shrink:0;">Time (s):</label>' +
-                        '<input type="number" class="node-input-hint-time" min="0" step="1" style="width:110px;"><br/>' +
-                        '<label style="flex-shrink:0;">File:</label>' +
-                        '<input type="text" class="node-input-hint-message" placeholder="Path to hint file" style="flex:1;">' +
+                    '<div style="display:flex; gap:8px; align-items:center; width:100%; flex-wrap:wrap;">' +
+                        '<label style="flex-shrink:0;" class="time-hint">Time:</label>' +
+                        '<input type="number" class="node-input-hint-time time-hint required" min="0" step="1" style="width:110px;">' +
+                        '<span class="unit time-hint">s</span>' +
+                        '<label style="flex-shrink:0;" class="state-hint">Min:</label>' +
+                        '<input type="number" class="node-input-hint-min state-hint required" min="0" step="1" style="width:110px;">' +
+                        '<span class="unit state-hint">s</span>' +
+                        '<div style="flex-basis:100%; height:0;"></div>' + // Line break
+                        '<label style="flex-shrink:0;">Hint:</label>' +
+                        '<input type="text" class="node-input-hint-message required" placeholder="Path to hint file" style="flex:1;">' +
+                        '<div style="flex-basis:100%; height:0; class="state-hint"></div>' + // Line break
+                        '<label style="flex-shrink:0;" class="state-hint optional" id="maxLabel">Max:</label>' +
+                        '<input type="number" class="node-input-hint-max state-hint" min="0" step="1" style="width:110px;">' +
+                        '<span class="unit state-hint">s</span>' +
+                        '<label style="flex-shrink:0;" class="state-hint optional" id="targetTimeLabel">TargetTime (absolute):</label>' +
+                        '<input type="number" class="node-input-hint-target state-hint" min="0" step="1" style="width:110px;">' +
+                        '<span class="unit state-hint">s</span>' +
                     '</div>'
                 );
 
-                row.find(".node-input-hint-time").val(hint && Number.isInteger(hint.time) ? hint.time : 0);
-                row.find(".node-input-hint-message").val(hint && typeof hint.message === "string" ? hint.message : "");
+                row.find(".node-input-hint-time").val(hint && Number.isInteger(hint.time) ? hint.time : null);
+                row.find(".node-input-hint-message").val(hint && typeof hint.message === "string" ? hint.message : null);
+                row.find(".node-input-hint-min").val(hint && Number.isInteger(hint.min) ? hint.min : null);
+                row.find(".node-input-hint-max").val(hint && Number.isInteger(hint.max) ? hint.max : null);
+                row.find(".node-input-hint-target").val(hint && Number.isInteger(hint.target) ? hint.target : null);
+                row.on("input", function() {
+                    validateHint(row);
+                });
+                validateHint(row);
                 return row;
             }
 
@@ -50,9 +248,7 @@
                 sortable: true,
                 addItem: function(container, i, hint) {
                     container.append(createHintRow(hint));
-                },
-                sort: function(elA, elB) {
-                    return elA.time - elB.time;
+                    switchMode();
                 }
             });
 
@@ -60,39 +256,97 @@
                 hintsContainer.editableList("addItem", hint);
             }
 
-            $("#node-input-hints-add").on("click", function() {
-                hintsContainer.editableList("addItem", { time: 0, message: "" });
+            // CONDITIONS
+            const conditionsContainer = $("#node-input-conditions-container");
+            const conditions = Array.isArray(this.conditions) ? this.conditions : [];
+
+            function createConditionRow(condition) {
+                const row = $(
+                    '<div style="display:flex; gap:8px; align-items:center; width:100%;">' +
+                        '<label style="flex-shrink:0;">Name:</label>' +
+                        '<input type="text" class="node-input-condition-value" placeholder="Name of riddle" style="flex:1;">' +
+                    '</div>'
+                );
+
+                row.find(".node-input-condition-value").val(typeof condition === "string" ? condition : "");
+                return row;
+            }
+
+            conditionsContainer.editableList({
+                addButton: true,
+                removable: true,
+                sortable: false,
+                addItem: function(container, i, condition) {
+                    container.append(createConditionRow(condition));
+                }
             });
 
-            $("#node-input-autoArm").val(this.autoArm);
+            for (const condition of conditions) {
+                conditionsContainer.editableList("addItem", condition);
+            }
+
+            $("#node-input-mode").val(this.mode);
+            switchMode();
         },
         oneditsave: function() {
+            var mode;
+            const conditions = [];
             const hints = [];
+
+            // Get mode
+            if ($("#node-input-mode").val() === "TIME") {
+                mode = "TIME"
+            } else if ($("#node-input-mode").val() === "STATE") {
+                mode = "STATE"
+            } else {
+                console.warn("Invalid mode selected, defaulting to TIME");
+                mode = "TIME";
+            }
+
+            // Get conditions
+            $("#node-input-conditions-container").editableList("items").each(function() {
+                const row = $(this);
+                const condition = row.find(".node-input-condition-value").val();
+
+                if (typeof condition === "string") {
+                    conditions.push(condition);
+                }
+            });
+
+            // Get hints
             $("#node-input-hints-container").editableList("items").each(function() {
                 const row = $(this);
                 const time = Number.parseInt(row.find(".node-input-hint-time").val(), 10);
+                const min = Number.parseInt(row.find(".node-input-hint-min").val(), 10);
+                const max = Number.parseInt(row.find(".node-input-hint-max").val(), 10);
+                const target = Number.parseInt(row.find(".node-input-hint-target").val(), 10);
                 const message = row.find(".node-input-hint-message").val();
 
-                if (Number.isInteger(time) && typeof message === "string") {
-                    hints.push({ time: time, message: message });
+                if (mode === "TIME") {
+                    if (Number.isInteger(time) && typeof message === "string") {
+                        hints.push({ time: time, message: message });
+                    }
+                } else {
+                    const hint = { message: message, min: min };
+                    if (!Number.isInteger(min) || typeof message !== "string") {
+                        return;
+                    }
+                    if (Number.isInteger(max)) {
+                        hint.max = max;
+                    }
+                    if (Number.isInteger(target)) {
+                        hint.target = target;
+                    }
+                    hints.push(hint);
                 }
             });
-            $("#node-input-autoArm").val() === "true" ? this.autoArm = true : this.autoArm = false;
 
+            // Save values
+            this.conditions = conditions;
             this.hints = hints;
+            this.mode = mode;
         },
-        oneditresize: function(size) {
-            var rows = $("#dialog-form>div:not(.node-input-hints-container-row)");
-            var height = size.height;
-            for (var i=0; i<rows.length; i++) {
-                height -= $(rows[i]).outerHeight(true);
-            }
-            var editorRow = $("#dialog-form>div.node-input-hints-container-row");
-            height -= (parseInt(editorRow.css("marginTop"))+parseInt(editorRow.css("marginBottom")));
-            height += 16;
-            height -= 40; // Extra padding for the add button and list spacing
-            $("#node-input-hints-container").editableList('height',height);
-        }
+        oneditresize: setHeights
     });
 </script>
 
@@ -101,17 +355,27 @@
         <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
         <input type="text" id="node-input-name" placeholder="Name">
     </div>
-    <div class="form-row">
-        <label for="node-input-autoArm"><i class="fa fa-clock"></i> Start Time</label>
-        <select id="node-input-autoArm">
-            <option value="true">Start</option>
-            <option value="false">previous Hint</option>
+     <div class="form-row">
+        <label for="node-input-mode"><i class="fa fa-clock"></i> Mode</label>
+        <select id="node-input-mode" onchange="switchMode()">
+            <option value="TIME">Time-based</option>
+            <option value="STATE">State-based</option>
         </select>
-        <p style="font-size:0.9em; color:#666; margin:0 0 8px 0;"><i>If 'previous Hint' the node will wait until the previous hint is given. Otherwise, it will start immediately.</i></p>
+        <p style="font-size:0.9em; color:#666; margin:0 0 8px 0;"><i>
+            Time-based hints start at specified times, state-based hints are timed after previous riddles are solved
+        </i></p>
     </div>
-    <div class="form-row node-input-hints-container-row">
+    <div class="form-row list-container-row" id="conditions-row">
+        <label><i class="fa fa-check"></i> Previous Riddles</label>
+        <p style="font-size:0.9em; color:#666; margin:0 0 8px 0;"><i>Each entry is the name of a riddle-node.</i></p>
+        <div style="display:flex; flex-direction:column; gap:8px; width:100%;">
+            <ol id="node-input-conditions-container" style="list-style-type:none; margin:0; padding:0;"></ol>
+        </div>
+    </div>
+   
+    <div class="form-row list-container-row">
         <label for="node-input-hints-container"><i class="fa fa-list"></i> Hints</label>
-        <p style="font-size:0.9em; color:#666; margin:0 0 8px 0;"><i>Time is the interval between hints</i></p>
+        <p style="font-size:0.9em; color:#666; margin:0 0 8px 0;"><i>See help for all options</i></p>
         <div style="display:flex; flex-direction:column; gap:8px; width:100%;">
             <ol id="node-input-hints-container" style="list-style-type:none; margin:0; padding:0;"></ol>
         </div>
@@ -120,10 +384,19 @@
 
 <script type="text/html" data-help-name="AutomatedHint">
     <p>
-        This node provides hints based on riddle state and time.
-        It can be configured with a list of hints, each having a time (in seconds) and a message (path to the hint file). 
-        The node will output the hints at the specified intervals after being triggered. 
-        The trigger can be either the start of the puzzle or the previous hint, depending on the configuration.
+        This node provides hints based on either riddle state or time.
+        It has two different modes of operation:
+        <ul>
+            <li><a href="#time-based-mode"><strong>Time-based mode:</strong></a>
+                Hints are triggered after a certain amount of time has passed since the start of the game.
+                After each hint the timer is reset, so the times are cumulative and order matters.
+            </li>
+            <li><a href="#state-based-mode"><strong>State-based mode:</strong></a>
+                The timer only starts when all specified riddles are solved or a ready message is received.
+                Hints are then triggered after a certain amount of time has passed since the solving or previous hint.
+                Times are cumulative and order matters.
+            </li>
+        </ul>
     </p>
 
     <h3>Inputs</h3>
@@ -136,30 +409,52 @@
         <dd> the type of message, decides the behavior of the node:
             <ul>
                 <li><strong>TIME</strong>: The node will check if it's time to output the next hint based on the elapsed time.</li>
-                <li><strong>ARM</strong>: The node will use the payload as time of last hint and start providing hints based on that.</li>
                 <li><strong>RESET</strong>: The node will be reset to initial state.</li>
                 <li><strong>SOLVED</strong>: The node will mark the puzzle as solved and stop providing hints.</li>
+                <li><strong>CONDITIONS_MET</strong>: The node will mark the conditions as met. Overrides the conditions list, alternatively if node depends not on another riddle but a message.</li>
             </ul>
         </dd>
     </dl>
 
     <h3>Outputs</h3>
-    <ol class="node-ports">
-        <li>Hint output
-            <dl class="message-properties">
-                <dt>topic <span class="property-type">string</span></dt>
-                <dd>the topic is "HINT".</dd>
-                <dt>payload <span class="property-type">string</span></dt>
-                <dd>the hint message filename.</dd>
-            </dl>
-        </li>
-        <li>ARM output
-            <dl class="message-properties">
-                <dt>topic <span class="property-type">string</span></dt>
-                <dd>the topic is "ARM".</dd>
-                <dt>payload <span class="property-type">string</span></dt>
-                <dd>the time when the next hint would have come.</dd>
-            </dl>
-        </li>
-    </ol>
+        <dl class="message-properties">
+            <dt>topic <span class="property-type">string</span></dt>
+            <dd>the topic is "HINT".</dd>
+            <dt>payload <span class="property-type">string</span></dt>
+            <dd>the hint message filename.</dd>
+        </dl>
+
+    <h3 id="time-based-mode">Time based</h3>
+    <p>
+        The initial start condition is the start of the game. Intermediate hints are specified with a time between them
+        and the previous hint. For example, if the first hint has time 300, it will be triggered 5 minutes after the start of the game.
+        If the second hint has time 120, it will be triggered 2 minutes after the first hint, so 7 minutes after the start of the game.
+        <br>
+        A hint in time-based mode looks like this:
+    </p>
+    <dl class="message-properties">
+        <dt>Time <span class="property-type">number</span></dt>
+        <dd>the time in seconds when the hint should be triggered.</dd>
+        <dt>Hint <span class="property-type">string</span></dt>
+        <dd>the hint message filename.</dd>
+    </dl>
+
+    <h3 id="state-based-mode">State based</h3>
+    <p>
+        The initial start condition is that all specified riddles are solved.
+        Hints are then triggered based on the time specified in each hint, but the timer is reset after each hint, so consecutive
+        hints are triggered based on the time specified in each hint and the state of the puzzle.
+        <br>
+        A hint in state-based mode looks like this:
+    </p>
+    <dl class="message-properties">
+        <dt class="property-optional">TargetTime <span class="property-type">number</span></dt>
+        <dd>the global target time in seconds after which the hint should ideally be triggered. If present, the node tries to trigger the hint as close to this time as possible.</dd>
+        <dt>Min <span class="property-type">number</span></dt>
+        <dd>the minimum time in seconds after which the hint should be triggered.</dd>
+        <dt class="property-optional">Max <span class="property-type">number</span></dt>
+        <dd>the maximum time in seconds after which the hint should be triggered. Only effective if <code>TargetTime</code> is also specified.</dd>
+        <dt>Hint <span class="property-type">string</span></dt>
+        <dd>the filename of the hint message to be sent when the hint is triggered.</dd>
+    </dl>
 </script>
