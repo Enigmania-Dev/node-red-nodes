@@ -189,7 +189,7 @@ module.exports = function (RED) {
             } else if (config.mode === "STATE") {
                 const minTime = hint.min || 0;
                 const maxTime = hint.max || Infinity;
-                const targetTime = hint.targetTime || null;
+                const targetTime = hint.target || null;
 
                 // If targetTime is specified, calculate the optimal time to trigger the hint
                 if (targetTime !== null) {

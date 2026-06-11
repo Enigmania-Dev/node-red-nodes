@@ -331,10 +331,8 @@
                     if (!Number.isInteger(min) || typeof message !== "string") {
                         return;
                     }
-                    if (Number.isInteger(max)) {
+                    if (Number.isInteger(max) && Number.isInteger(target)) {
                         hint.max = max;
-                    }
-                    if (Number.isInteger(target)) {
                         hint.target = target;
                     }
                     hints.push(hint);
