@@ -1,6 +1,6 @@
 {
   "name": "@enigmania/hint-helpers",
-  "version": "1.2.3",
+  "version": "1.2.4",
   "description": "helper functions for handling hints and serving static files in enigmania",
   "main": "automatedHint.js",
   "scripts": {
@@ -8,13 +8,15 @@
   },
   "author": "Maya Bach (M.Bach@enigmania.de)",
   "dependencies": {
-    "serve-static": "^1.15.0"
+    "serve-static": "^1.15.0",
+    "string-similarity-js": "^2.1.4"
   },
   "license": "ISC",
    "node-red" : {
         "nodes": {
             "AutomatedHint": "automatedHint.js",
-            "staticProject": "staticServeProject.js"
+            "staticProject": "staticServeProject.js",
+            "stringSimilarity": "stringSimilarity.js"
         }
     }
 }

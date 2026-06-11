@@ -1,0 +1,51 @@
+<script type="text/javascript">
+  RED.nodes.registerType("stringSimilarity", {
+    category: "function",
+    color: "#a6bbcf",
+    defaults: {
+      correct: { value: "", required: true, validate: RED.validators.regex(/^.+$/, "Correct answer cannot be empty") },
+      threshold: { value: 0.6, required: true, validate: function (v) { return !isNaN(v) && v >= 0 && v <= 1; } },
+    },
+    inputs: 1,
+    outputs: 1,
+    icon: "font-awesome/fa-text-width",
+    label: function () {
+      return this.correct ? `Vgl. ${this.correct}` : "stringSimilarity";
+    },
+  });
+</script>
+
+<script type="text/html" data-template-name="stringSimilarity">
+  <div class="form-row">
+    <label for="node-input-correct"><i class="fa fa-tag"></i> Correct Answer</label>
+    <input type="text" id="node-input-correct" placeholder="Correct Answer" />
+  </div>
+  <div class="form-row">
+    <label for="node-input-threshold"><i class="fa fa-slider"></i> Threshold</label>
+    <input type="number" id="node-input-threshold" placeholder="Threshold" min="0" max="1" step="0.05" />
+  </div>  
+</script>
+
+<script type="text/html" data-help-name="stringSimilarity">
+    <p>
+       Computes the similarity between the input string and a predefined correct answer using the Sorensen-Dice coefficient.
+       The similarity is a number between 0 and 1, where 1 means an exact match and 0 means no similarity.
+       It only sends the message if the similarity score is above a certain threshold (default: 0.6), which can be adjusted in the node configuration.
+       Depends on the "string-similarity-js" library to calculate the similarity score.
+    </p>
+
+    <h3>Inputs</h3>
+    <dl class="message-properties">
+        <dt>payload
+            <span class="property-type">string </span>
+        </dt>
+    </dl>
+
+    <h3>Outputs</h3>
+        <dl class="message-properties">
+            <dt>payload <span class="property-type">string</span></dt>
+            <dd>the same as input.</dd>
+            <dt>similarity <span class="property-type">number</span></dt>
+            <dd>a number between 0 and 1 representing the similarity between the input and the correct answer, where 1 means an exact match and 0 means no similarity.</dd>
+        </dl>
+</script>
