@@ -25,7 +25,7 @@ module.exports = function (RED) {
         nodeContext.set("forceReady", false); // Whether the node has been forced ready
 
         // also add a variable to the flow context to track whether this node's riddle is solved, which can be used as a condition for other nodes
-        flowContext.set(config.name+"_solved", false); 
+        flowContext.set(config.name + "_solved", false);
 
         // Add self to the list of hint nodes in the flow context
         let hintNodes = flowContext.get("hintNodes") || [];
@@ -40,14 +40,31 @@ module.exports = function (RED) {
         }
         hintNodes.push(config.name);
         flowContext.set("hintNodes", hintNodes);
-        
+
+        function updateSchedule(time) {
+            let sched = flowContext.get("schedule") || {};
+            sched[config.name] = {
+                time: time,
+                node: config.name,
+                description: (config.description || config.name) + " - Hint " + (nodeContext.get("hintIndex") + 1),
+                hintIndex: nodeContext.get("hintIndex")
+            };
+            flowContext.set("schedule", sched);
+        }
+
+        function removeSchedule() {
+            let sched = flowContext.get("schedule") || {};
+            delete sched[config.name];
+            flowContext.set("schedule", sched);
+        }
+
         // When the node is closed, remove it from the flow context and mark its riddle as unsolved
-        node.on('close', function() {
+        node.on('close', function () {
             // Remove self from the list of hint nodes in the flow context
             let hintNodes = flowContext.get("hintNodes") || [];
             hintNodes = hintNodes.filter(name => name !== config.name);
             flowContext.set("hintNodes", hintNodes);
-            flowContext.set(config.name+"_solved", false);
+            flowContext.set(config.name + "_solved", false);
         });
 
         node.on('input', function (msg) {
@@ -64,7 +81,7 @@ module.exports = function (RED) {
                             || node.warn(
                                 `Condition "${condition}" is not the name of any riddle-node in the flow context. Please check your conditions.`
                             ));
-                        
+
                     });
                     if (!allConditionsMet) {
                         node.warn(`Conditions: ${flowContext.get("hintNodes")} - ${conditions}`);
@@ -84,26 +101,29 @@ module.exports = function (RED) {
 
             // If this is reset message
             if (msg.topic == "RESET") {
-                flowContext.set(config.name+"_solved", false);
+                flowContext.set(config.name + "_solved", false);
                 nodeContext.set("hintIndex", 0);
                 nodeContext.set("timer", 0);
                 nodeContext.set("forceReady", false);
                 node.status({});
+                removeSchedule();
                 return;
             }
             // If this is solved message
             if (msg.topic == "SOLVED") {
-                flowContext.set(config.name+"_solved", true);
+                flowContext.set(config.name + "_solved", true);
                 node.status({
                     fill: "grey",
                     shape: "dot",
                     text: "Solved after " + nodeContext.get("hintIndex") + " hints"
                 });
+                removeSchedule();
                 return;
             }
             // If this is a force ready message
             if (msg.topic == "CONDITIONS_MET") {
                 nodeContext.set("forceReady", true);
+                removeSchedule();
                 return;
             }
 
@@ -111,12 +131,12 @@ module.exports = function (RED) {
             // Do nothing if:
             if (
                 msg.gameState != "playing" // paused
-                || flowContext.get(config.name+"_solved") // already solved riddle
+                || flowContext.get(config.name + "_solved") // already solved riddle
                 || msg.topic != "TIME" // only react to time messages
                 || hints.length === 0 // no hints configured
                 || hints.length <= nodeContext.get("hintIndex") // all hints already given
             ) {
-                if (flowContext.get(config.name+"_solved")) {
+                if (flowContext.get(config.name + "_solved")) {
                     node.status({
                         fill: "grey",
                         shape: "dot",
@@ -129,7 +149,7 @@ module.exports = function (RED) {
                         shape: "dot",
                         text: "No hints configured"
                     });
-                } else if(hints.length <= nodeContext.get("hintIndex")) {
+                } else if (hints.length <= nodeContext.get("hintIndex")) {
                     node.status({
                         fill: "red",
                         shape: "dot",
@@ -143,6 +163,7 @@ module.exports = function (RED) {
                         text: "Not Playing"
                     });
                 }
+                removeSchedule();
                 return;
             }
 
@@ -158,7 +179,7 @@ module.exports = function (RED) {
                 ( // If no conditions, wait for force ready message, otherwise check conditions
                     conditions.length > 0
                     && conditions.every(
-                        condition => flowContext.get(condition+"_solved") === true
+                        condition => flowContext.get(condition + "_solved") === true
                     )
                 )
                 || nodeContext.get("forceReady") === true // allow to force conditions met via message
@@ -178,8 +199,9 @@ module.exports = function (RED) {
                     shape: "ring",
                     text: "Waiting for conditions"
                 });
+                removeSchedule();
                 return; // If any condition is not met, do not proceed
-            } 
+            }
 
             const hint = hints[nodeContext.get("hintIndex")];
             // Calculate time to next hint based on mode
@@ -217,19 +239,21 @@ module.exports = function (RED) {
                 msg.payload = hint.message;
                 msg.description = (config.description || config.name) + " - Hint " + nodeContext.get("hintIndex");
                 
+                removeSchedule();
                 node.send(msg);
             }
 
             // Update node status with the time until the next hint or indicate that there are no more hints
-            if (nextHintTime !== Infinity) {
+            if (nextHintTime !== Infinity && nodeContext.get("hintIndex") < hints.length) {
                 const timeStr = formatSeconds(Math.max(0, nextHintTime - (elapsedSeconds - nodeContext.get("timer"))));
                 node.status({
                     fill: "green",
                     shape: "ring",
-                    text: `Hint ${nodeContext.get("hintIndex")+1} in ${timeStr}`
+                    text: `Hint ${nodeContext.get("hintIndex") + 1} in ${timeStr}`
                 });
+                updateSchedule((nodeContext.get("timer") + nextHintTime) - elapsedSeconds);
             }
-            
+
             return;
         });
     }
