@@ -1,5 +1,9 @@
 function formatSeconds(seconds) {
-    if (seconds === undefined || seconds === null || isNaN(seconds)) {
+    if (
+        typeof seconds !== "number"
+        || isNaN(seconds)
+        || seconds < 0
+    ) {
         return "";
     }
     if (seconds < 60) {
@@ -27,17 +31,17 @@ module.exports = function (RED) {
 
             console.log("Current schedule:", flowContext.get("schedule"));
             node.send(schedule
-                .concat(Array(config.outputs || 1).fill({time: '', description: ''}))
+                .concat(Array(config.outputs || 1).fill({ time: '', description: '' }))
                 .slice(0, config.outputs || 1)
                 .map(item => {
-                return {
-                    topic: "HINT_SCHEDULE",
-                    payload: {
-                        time: formatSeconds(item.time),
-                        description: item.description,
+                    return {
+                        topic: "HINT_SCHEDULE",
+                        payload: {
+                            time: formatSeconds(item.time),
+                            description: item.description,
+                        }
                     }
-                }
-            }));
+                }));
         })
     }
     RED.nodes.registerType("HintUI", HintUINode);
