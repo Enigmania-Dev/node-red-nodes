@@ -207,8 +207,8 @@
             }
         },
         inputs: 1,
-        outputs: 3,
-        outputLabels: ["Hint data", "State", "Log"],
+        outputs: 1,
+        outputLabels: ["Hint/State/Log"],
         icon: "file.svg",
         label: function () {
             return (this.mode === "TIME" ? "T: " : "S: ") + (this.name || "AutomatedHint");
@@ -397,6 +397,8 @@
 <script type="text/html" data-help-name="AutomatedHint">
     <p>
         This node provides hints based on either riddle state or time.
+        Its <strong>name</strong> is used to identify the node in the flow as an id.
+        Its <strong>description</strong> is used in log messages and state updates.
         It has two different modes of operation:
         <ul>
             <li><a href="#time-based-mode"><strong>Time-based mode:</strong></a>
@@ -429,12 +431,39 @@
     </dl>
 
     <h3>Outputs</h3>
-        <dl class="message-properties">
-            <dt>topic <span class="property-type">string</span></dt>
-            <dd>the topic is "HINT".</dd>
-            <dt>payload <span class="property-type">string</span></dt>
-            <dd>the hint message filename.</dd>
-        </dl>
+    There are three kinds of output messages:
+    <ol>
+        <li>Hint messages
+            <dl class="message-properties">
+                <dt>topic <span class="property-type">string</span></dt>
+                <dd>the topic is "HINT".</dd>
+                <dt>payload <span class="property-type">string</span></dt>
+                <dd>the hint message filename.</dd>
+                <dt>description <span class="property-type">string</span></dt>
+                <dd>the description is in the format "{node description or name} - Hint {hint number}", for example "Puzzle 1 - Hint 2".</dd>
+            </dl>
+        </li>
+        <li>State updates
+            <dl class="message-properties">
+                <dt>topic <span class="property-type">string</span></dt>
+                <dd>the topic is "STATE".</dd>
+                <dt>node <span class="property-type">string</span></dt>
+                <dd>the name of the node, or its id.</dd>
+                <dt>time <span class="property-type">string</span></dt>
+                <dd>the formatted time remaining until the next hint is triggered. Empty if no hint is active.</dd>
+                <dt>description <span class="property-type">string</span></dt>
+                <dd>the description is in the format "{node description or name} - Hint {hint number}" if a hint is currently active, or empty if no hint is active.</dd>
+            </dl>
+        </li>
+        <li>Log messages
+            <dl class="message-properties">
+                <dt>topic <span class="property-type">string</span></dt>
+                <dd>the topic is "LOG".</dd>
+                <dt>payload <span class="property-type">string</span></dt>
+                <dd>log message in the format "{node name}: {description} {event}".</dd>
+            </dl>
+        </li>
+    </ol>
 
     <h3 id="time-based-mode">Time based</h3>
     <p>
