@@ -215,6 +215,7 @@ module.exports = function (RED) {
                 nodeContext.set("timer", elapsedSeconds);
                 msg.topic = "HINT";
                 msg.payload = hint.message;
+                msg.description = (config.description || config.name) + " - Hint " + nodeContext.get("hintIndex");
                 
                 node.send(msg);
             }
